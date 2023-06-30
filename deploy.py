@@ -9,17 +9,34 @@ from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import GridSearchCV
 from sklearn import preprocessing
+from sqlalchemy.sql import text
 
 st.title("ITC Biscuit Manufacturing Analytics")
 colnames = ['ABC','Water','Gluten%','SV ml','Moisture','Slot']
 df=pd.read_csv("itc_file.csv",names = colnames,header=None)
 
-conn = st.experimental_connection('itc_biscuit',type = 'sql')
-tbl = conn.query('select * from maida')
+conn = st.experimental_connection('itc_biscuit',type = 'sql',autocommit = True)
+conn.session.execute(text('''drop table if exists maida3'''))
+conn.session.execute(text('''create table if not exists maida3(
+    abc float,
+    water float,
+    gluten float,
+    sv float,
+    moisture float,
+    timing varchar(50)
+)'''))
+for index, row in df.iterrows():
+    print(row['ABC'])
+    conn.session.execute(text('''insert into maida3(abc,water,gluten,sv,moisture,timing) values(:abc,:water,:gluten,:sv,:moisture,:timing)'''),params = {'abc':row['ABC'],'water':row['Water'],'gluten':row['Gluten%'],'sv':row['SV ml'],'moisture':row['Moisture'],'timing':row['Slot']})
+conn.session.commit()
+tbl = conn.query('select * from maida3')
+print('----------')
 print(tbl)
+
+
 le = preprocessing.LabelEncoder()
-df['Slot']=le.fit_transform(df['Timing'])
-df.drop(['Timing'],axis=1,inplace=True)
+df['Slot']=le.fit_transform(df['Slot'])
+# df.drop(['Slot'],axis=1,inplace=True)
 
 x=df.drop(['ABC','Water'],axis=1)
 y=df.drop(['Gluten%','SV ml','Moisture','Slot'],axis=1)
@@ -86,20 +103,22 @@ feedback= st.selectbox(
     'Were the output values predicted accurately?',
     ('YES', 'NO')
 )
-
-if(feedback=='NO'):
-    y_abc=float(st.number_input("Enter correct amt of ABC "))
-    y_water=float(st.number_input("Enter correct amt of water"))
-    y_correct=[]
-    y_correct.append(y_abc)
-    y_correct.append(y_water)
-    y_final=[]
-    y_final.append(y_correct)
-    add=np.concatenate((x_final,y_final),axis=1)
-    array_df = pd.DataFrame(add, columns=df.columns)
-    array_df.to_csv('itc_file.csv',index = False,mode = 'a',header = False)
-
+if x_final['Gluten%'][0]==0 or x_final['SV ml'][0] == 0 or x_final['Moisture'][0] == 0:
+    print('No Response')
 else:
-    add=np.concatenate((x_final,y_pred),axis=1)
-    array_df = pd.DataFrame(add, columns=df.columns)
-    array_df.to_csv('itc_file.csv',index = False,mode = 'a',header = False)
+    if(feedback=='NO'):
+        y_abc=float(st.number_input("Enter correct amt of ABC "))
+        y_water=float(st.number_input("Enter correct amt of water"))
+        y_correct=[]
+        y_correct.append(y_abc)
+        y_correct.append(y_water)
+        y_final=[]
+        y_final.append(y_correct)
+        add=np.concatenate((y_final,x_final),axis=1)
+        array_df = pd.DataFrame(add, columns=df.columns)
+        array_df.to_csv('itc_file.csv',index = False,mode = 'a',header = False)
+
+    else:
+        add=np.concatenate((y_pred,x_final),axis=1)
+        array_df = pd.DataFrame(add, columns=df.columns)
+        array_df.to_csv('itc_file.csv',index = False,mode = 'a',header = False)
